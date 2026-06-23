@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#10131a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Agile Timer">
+<title>Agile Timer</title>
+<style>
+  :root{
+    --bg:#0e1117; --card:#171b24; --card2:#1f2430; --line:#2a3140;
+    --txt:#e8edf5; --muted:#9aa6b8; --accent:#5b8cff; --good:#34d399;
+    --warn:#f59e0b; --bad:#ef4444; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;overflow-x:hidden}
+  body{
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--txt);
+    padding:max(12px,env(safe-area-inset-top)) 12px calc(40px + env(safe-area-inset-bottom));
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:680px;margin:0 auto}
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin:4px 2px 12px}
+  h1{font-size:20px;margin:0;letter-spacing:.2px}
+  h1 small{color:var(--muted);font-weight:400;font-size:13px}
+  .status{font-size:12px;color:var(--muted);text-align:right;flex:0 0 auto}
+  .status b{color:var(--txt)}
+  @media(max-width:480px){
+    header{flex-direction:column;align-items:stretch;gap:8px}
+    .status{text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    #refreshBtn{margin-top:0 !important}
+  }
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);
+    background:var(--card2);color:var(--txt);padding:7px 12px}
+  button:active{transform:translateY(1px)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .banner{border-radius:var(--radius);padding:11px 14px;margin:0 0 14px;font-size:13.5px;display:flex;gap:9px;align-items:flex-start}
+  .banner.ok{background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.4)}
+  .banner.wait{background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.45)}
+  .banner.err{background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.45)}
+  .banner .ico{font-size:16px;line-height:1.2}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 15px;margin:0 0 14px}
+  .card h2{margin:0 0 2px;font-size:16px;display:flex;align-items:center;gap:8px}
+  .card .sub{color:var(--muted);font-size:12px;margin:0 0 12px}
+  .rec{background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin:9px 0 0}
+  .rec .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px}
+  .rec .big{font-size:21px;font-weight:650;letter-spacing:.3px}
+  .rec .big .unit{font-size:13px;color:var(--muted);font-weight:400}
+  .rec .meta{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .rec .meta .chip{display:inline-block;background:#0c0f15;border:1px solid var(--line);border-radius:7px;padding:1px 7px;margin-right:5px;color:var(--txt)}
+  .rec.flag{border-color:rgba(245,158,11,.5)}
+  .alts{margin-top:8px;font-size:12.5px;color:var(--muted)}
+  .alts span{display:inline-block;margin:2px 10px 2px 0}
+  .summary table{width:100%;border-collapse:collapse;font-size:14.5px}
+  .summary td{padding:9px 2px;border-top:1px solid var(--line);vertical-align:middle}
+  .summary tr:first-child td{border-top:0}
+  .summary .ap{font-weight:600;white-space:nowrap;padding-right:10px}
+  .summary .when{font-weight:650;line-height:1.35}
+  .summary .pr{text-align:right;color:var(--muted);white-space:nowrap;padding-left:8px}
+  .summary .pr b{color:var(--txt);font-size:15.5px}
+  .summary .cap{color:var(--muted);font-size:12px;font-weight:400;margin:0 0 8px}
+  .pill{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600}
+  .when .pill{margin-left:6px}
+  .pill.normal{background:rgba(52,211,153,.16);color:var(--good)}
+  .pill.exp{background:rgba(239,68,68,.18);color:#ff8a8a}
+  .ac-step{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+  .ac-step:first-of-type{border-top:0}
+  .ac-step .n{flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--card2);border:1px solid var(--line);
+    display:grid;place-items:center;font-size:12px;font-weight:700}
+  .ac-step.cool .n{color:var(--good);border-color:rgba(52,211,153,.5)}
+  .ac-step.avoid .n{color:#ff8a8a;border-color:rgba(239,68,68,.5)}
+  .ac-step .t b{font-size:14px}
+  .ac-step .t .d{color:var(--muted);font-size:12.5px}
+  #chartCard{padding-bottom:8px;position:relative}
+  svg{width:100%;height:auto;display:block;touch-action:pan-y;cursor:crosshair}
+  .chart-tip{position:absolute;pointer-events:none;background:#0c0f15;border:1px solid var(--line);
+    border-radius:8px;padding:5px 9px;font-size:12.5px;font-weight:600;white-space:nowrap;
+    transform:translate(-50%,-100%);opacity:0;transition:opacity .08s;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+  .chart-tip .tprice{color:var(--accent)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:6px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+  details.settings{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:0 15px;margin:0 0 14px}
+  details.settings summary{cursor:pointer;padding:13px 0;font-weight:600;list-style:none}
+  details.settings summary::-webkit-details-marker{display:none}
+  details.settings summary::after{content:"▾";float:right;color:var(--muted)}
+  details.settings[open] summary::after{content:"▴"}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding:4px 0 16px}
+  .grid .full{grid-column:1/-1}
+  label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+  label.f input,label.f select{font:inherit;background:#0c0f15;border:1px solid var(--line);color:var(--txt);
+    border-radius:8px;padding:7px 9px}
+  .row{display:flex;gap:8px;align-items:center}
+  .row button{flex:0 0 auto}
+  .hint{font-size:11px;color:var(--muted);margin-top:2px}
+  footer{color:var(--muted);font-size:11.5px;text-align:center;margin-top:6px;line-height:1.6}
+  a{color:var(--accent)}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--muted);border-top-color:transparent;
+    border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  @media(max-width:420px){ .rec .big{font-size:19px} h1{font-size:18px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>⚡ Agile Timer <small id="regionLabel"></small></h1>
+    <div class="status">
+      <div id="statusLine">Loading…</div>
+      <button id="refreshBtn" style="margin-top:6px;padding:4px 10px;font-size:12px">↻ Refresh</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner wait"><span class="ico">⏳</span><span id="bannerText">Loading prices…</span></div>
+
+  <div id="summary"></div>
+
+  <div id="cards"></div>
+
+  <div class="card" id="chartCard">
+    <h2>Price curve</h2>
+    <p class="sub" id="chartSub">Tonight → tomorrow (p/kWh inc VAT, Europe/London)</p>
+    <div id="chart"></div>
+    <div id="chartTip" class="chart-tip"></div>
+    <div class="legend">
+      <span><i style="background:#34d399"></i>cheap</span>
+      <span><i style="background:#f59e0b"></i>medium</span>
+      <span><i style="background:#ef4444"></i>expensive</span>
+      <span><i style="background:#5b8cff"></i>negative (paid to use)</span>
+      <span><i style="background:#fff;height:2px;width:14px"></i>now</span>
+    </div>
+  </div>
+
+  <details class="settings" id="settings">
+    <summary>⚙︎ Settings</summary>
+    <div class="grid">
+      <label class="f full">Postcode lookup
+        <div class="row">
+          <input id="setPostcode" placeholder="e.g. SW1A 1AA" style="flex:1">
+          <button id="lookupBtn">Find region</button>
+        </div>
+        <span class="hint" id="lookupHint"></span>
+      </label>
+      <label class="f">Region (DNO group)
+        <select id="setRegion"></select>
+      </label>
+      <label class="f">Agile product code
+        <input id="setProduct">
+      </label>
+
+      <label class="f">Washing machine run (h)
+        <input id="setWashDur" type="number" step="0.5" min="0.5">
+      </label>
+      <label class="f">Dishwasher run (h)
+        <input id="setDishDur" type="number" step="0.5" min="0.5">
+      </label>
+      <label class="f">Washer kWh / cycle (optional)
+        <input id="setWashKwh" type="number" step="0.1" min="0" placeholder="for £ estimate">
+      </label>
+      <label class="f">Dishwasher kWh / cycle (optional)
+        <input id="setDishKwh" type="number" step="0.1" min="0" placeholder="for £ estimate">
+      </label>
+
+      <label class="f">Weekday finish-by
+        <input id="setWeekdayBy" type="time">
+      </label>
+      <label class="f">Weekend finish-by
+        <input id="setWeekendBy" type="time">
+      </label>
+      <label class="f">Start times
+        <select id="setGranularity">
+          <option value="60">On the hour (1h)</option>
+          <option value="30">Every 30 min</option>
+        </select>
+      </label>
+      <label class="f">Extra run must finish by
+        <input id="setExtraBy" type="time">
+      </label>
+      <label class="f full">Extra-run active hours (when you'd start a daytime load)
+        <div class="row">
+          <input id="setDayFrom" type="time"><span>–</span><input id="setDayTo" type="time">
+        </div>
+      </label>
+
+      <label class="f">Aircon evening start
+        <input id="setAcFrom" type="time">
+      </label>
+      <label class="f">Latest time to trigger
+        <input id="setAcTo" type="time">
+      </label>
+      <label class="f">Pre-cool earliest start
+        <input id="setPreFrom" type="time">
+      </label>
+      <label class="f">Pre-cool length (h)
+        <input id="setPreCoolHours" type="number" step="0.5" min="0.5">
+      </label>
+      <label class="f">Expensive if peak ≥ ×median
+        <input id="setExpMult" type="number" step="0.1" min="1">
+      </label>
+      <label class="f">…or peak ≥ (p/kWh)
+        <input id="setExpAbs" type="number" step="1" min="0">
+      </label>
+      <label class="f">Aircon "pricey" above (p/kWh)
+        <input id="setResumeCap" type="number" step="1" min="0">
+      </label>
+
+      <div class="full row" style="justify-content:flex-end;gap:10px">
+        <button id="resetBtn">Reset defaults</button>
+        <button id="saveBtn" class="primary">Save &amp; recalculate</button>
+      </div>
+    </div>
+  </details>
+
+  <footer>
+    Prices from the public Octopus Energy API · for guidance only, not financial advice.<br>
+    Next-day prices usually publish after ~4pm. All times Europe/London.
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- Settings ---------- */
+const DEFAULTS = {
+  region:"A", product:"AGILE-24-10-01",
+  washDur:2.5, dishDur:3.5, washKwh:"", dishKwh:"",
+  weekdayBy:"07:00", weekendBy:"08:00", granularity:60,
+  dayFrom:"07:00", dayTo:"19:00", extraBy:"22:00",
+  acFrom:"19:00", acTo:"22:00", preFrom:"12:00", preCoolHours:3,
+  expMult:1.8, expAbs:30, resumeCap:25
+};
+const REGIONS = {
+  A:"Eastern England", B:"East Midlands", C:"London", D:"Merseyside & N Wales",
+  E:"West Midlands", F:"North East", G:"North West", H:"Southern",
+  J:"South East", K:"South Wales", L:"South West", M:"Yorkshire",
+  N:"Southern Scotland", P:"Northern Scotland"
+};
+const LS_KEY="agile-timer-settings";
+const CACHE_KEY="agile-timer-cache";
+
+function loadSettings(){
+  let s={...DEFAULTS};
+  try{ Object.assign(s, JSON.parse(localStorage.getItem(LS_KEY)||"{}")); }catch(e){}
+  return s;
+}
+function saveSettings(s){ localStorage.setItem(LS_KEY, JSON.stringify(s)); }
+
+/* ---------- Europe/London time helpers (DST-safe, no libraries) ---------- */
+const LONDON_FMT = new Intl.DateTimeFormat("en-GB",{
+  timeZone:"Europe/London", weekday:"short", year:"numeric", month:"2-digit",
+  day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false
+});
+function londonParts(date){
+  const o={};
+  for(const p of LONDON_FMT.formatToParts(date)) if(p.type!=="literal") o[p.type]=p.value;
+  o.hour = o.hour==="24" ? "00" : o.hour;      // some engines emit 24
+  return o; // {weekday,year,month,day,hour,minute}
+}
+// Build a Date for a given London wall-clock time (handles BST/GMT correctly).
+function makeLondonDate(y,m,d,h,mi){
+  const guess = Date.UTC(y, m-1, d, h, mi);
+  const p = londonParts(new Date(guess));
+  const shown = Date.UTC(+p.year, +p.month-1, +p.day, +p.hour, +p.minute);
+  return new Date(guess - (shown - guess));
+}
+function isWeekend(date){ const w=londonParts(date).weekday; return w==="Sat"||w==="Sun"; }
+function fmtTime(date){ const p=londonParts(date); return `${p.hour}:${p.minute}`; }
+function fmtDay(date){ const p=londonParts(date); return `${p.weekday} ${p.day} ${["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+p.month]}`; }
+function hm(str){ const [h,m]=str.split(":").map(Number); return {h,m:m||0}; }
+// today (London) at a given HH:MM, optionally +dayOffset
+function londonAt(ref, timeStr, dayOffset){
+  const p=londonParts(ref); const t=hm(timeStr);
+  return makeLondonDate(+p.year, +p.month, +p.day + (dayOffset||0), t.h, t.m);
+}
+
+/* ---------- Data ---------- */
+async function fetchRates(s){
+  const from = new Date(Date.now() - 8*3600e3);
+  const to   = new Date(Date.now() + 40*3600e3);
+  const base = `https://api.octopus.energy/v1/products/${s.product}/electricity-tariffs/`+
+               `E-1R-${s.product}-${s.region}/standard-unit-rates/`;
+  let url = `${base}?period_from=${from.toISOString()}&period_to=${to.toISOString()}&page_size=200`;
+  const all=[]; let pages=0;
+  while(url && pages<6){
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(`API ${res.status} — check region/product code`);
+    const j = await res.json();
+    for(const r of j.results) all.push({from:new Date(r.valid_from), to:new Date(r.valid_to), price:r.value_inc_vat});
+    url = j.next; pages++;
+  }
+  all.sort((a,b)=>a.from-b.from);
+  if(!all.length) throw new Error("No price data returned");
+  // de-dupe (overlapping pages)
+  const seen=new Set(), out=[];
+  for(const r of all){ const k=+r.from; if(!seen.has(k)){ seen.add(k); out.push(r);} }
+  localStorage.setItem(CACHE_KEY, JSON.stringify({at:Date.now(), region:s.region, product:s.product,
+    rates: out.map(r=>({from:r.from.toISOString(), to:r.to.toISOString(), price:r.price}))}));
+  return out;
+}
+function loadCache(){
+  try{
+    const c=JSON.parse(localStorage.getItem(CACHE_KEY));
+    if(!c) return null;
+    c.rates = c.rates.map(r=>({from:new Date(r.from), to:new Date(r.to), price:r.price}));
+    return c;
+  }catch(e){ return null; }
+}
+
+/* ---------- Window optimiser ---------- */
+// slots sorted ascending. Find runs of `durH` finishing by `deadline`, starting >= earliest.
+function bestWindows(slots, durH, earliest, deadline, granMin){
+  const n = Math.round(durH*2);              // number of 30-min slots
+  const out=[];
+  for(let i=0; i+n<=slots.length; i++){
+    const win = slots.slice(i, i+n);
+    // contiguity
+    let ok=true;
+    for(let k=0;k<n-1;k++) if(+win[k].to !== +win[k+1].from){ ok=false; break; }
+    if(!ok) continue;
+    const start=win[0].from, end=win[n-1].to;
+    if(+start < +earliest) continue;
+    if(+end > +deadline) continue;
+    if(granMin===60 && londonParts(start).minute!=="00") continue;
+    const avg = win.reduce((a,x)=>a+x.price,0)/n;
+    out.push({start, end, avg, startPrice:win[0].price, slots:win});
+  }
+  out.sort((a,b)=>a.avg-b.avg);
+  return out;
+}
+// soonest possible run (any start), for the "start now" comparison
+function soonestWindow(slots, durH, earliest, deadline){
+  const n=Math.round(durH*2);
+  for(let i=0;i+n<=slots.length;i++){
+    const win=slots.slice(i,i+n);
+    let ok=true; for(let k=0;k<n-1;k++) if(+win[k].to!==+win[k+1].from){ok=false;break;}
+    if(!ok) continue;
+    if(+win[0].from < +earliest) continue;
+    if(+win[n-1].to > +deadline) continue;
+    return {start:win[0].from, end:win[n-1].to, avg:win.reduce((a,x)=>a+x.price,0)/n, startPrice:win[0].price};
+  }
+  return null;
+}
+
+function nextDeadline(now, s){
+  for(let off=0; off<3; off++){
+    const noonThatDay = londonAt(now, "12:00", off);
+    const by = isWeekend(noonThatDay) ? s.weekendBy : s.weekdayBy;
+    const dl = londonAt(now, by, off);
+    if(+dl > +now + 30*60e3) return {time:dl, weekend:isWeekend(noonThatDay), by};
+  }
+  return {time:londonAt(now,"07:00",1), weekend:false, by:"07:00"};
+}
+
+/* ---------- Aircon advisor ---------- */
+function median(arr){ if(!arr.length) return null; const a=[...arr].sort((x,y)=>x-y); const m=a.length>>1;
+  return a.length%2 ? a[m] : (a[m-1]+a[m])/2; }
+
+// Cost of the overnight run that starts at the latest trigger time (when you switch it on for the night).
+// Samples the first `lenMin` minutes so the figure reflects the pricey early hours.
+function triggerRun(slots, triggerAt, lenMin, cap){
+  const end = new Date(+triggerAt + Math.max(60,lenMin)*60e3);
+  const win = slots.filter(r=> +r.from>=+triggerAt && +r.from<+end);
+  if(!win.length) return null;
+  const avg = win.reduce((a,r)=>a+r.price,0)/win.length;
+  return { start:triggerAt, end:win[win.length-1].to, avg, pricey: avg>cap };
+}
+
+function airconPlan(slots, now, s){
+  const dayStart = londonAt(now, "00:00", 0), dayEnd = londonAt(now, "00:00", 1);
+  const daySlots = slots.filter(r=> +r.from>=+dayStart && +r.from<+dayEnd);
+  if(daySlots.length < 6) return null;
+  const med = median(daySlots.map(r=>r.price));
+
+  const peakWin = slots.filter(r=> +r.from>=+londonAt(now,"16:00") && +r.from<+londonAt(now,"19:00"));
+  let peak=null; for(const r of peakWin) if(!peak || r.price>peak.price) peak=r;
+  if(!peak) return null;
+
+  const comfortSlots = slots.filter(r=> +r.from>=+londonAt(now,s.acFrom) && +r.from<+londonAt(now,s.acTo));
+  const comfortAvg = comfortSlots.length ? comfortSlots.reduce((a,r)=>a+r.price,0)/comfortSlots.length : null;
+  // Overnight run triggered at the latest trigger time (acTo), regardless of price.
+  const triggerAt = londonAt(now, s.acTo);
+  const runLen = (hm(s.acTo).h*60+hm(s.acTo).m) - (hm(s.acFrom).h*60+hm(s.acFrom).m);  // window length
+  const nightRun = triggerRun(slots, triggerAt, runLen, s.resumeCap);
+
+  const expensive = peak.price >= s.expMult*med || peak.price >= s.expAbs;
+
+  const plan = { expensive, median:med, peak:{price:peak.price, time:peak.from},
+                 comfortAvg, acFrom:s.acFrom, acTo:s.acTo, nightRun, resumeCap:s.resumeCap };
+
+  if(expensive){
+    // Pre-cool should run RIGHT UP TO the spike so the room is coldest when it hits.
+    // Take the block ending at the spike start (capped at preCoolHours, no earlier than preFrom),
+    // then only trim slots that ramp up "massively" (> expMult × the cheapest slot in the block).
+    const spikeStart = londonAt(now,"16:00");
+    let pcStart = londonAt(now, s.preFrom);
+    const cap = new Date(+spikeStart - s.preCoolHours*3600e3);
+    if(+cap > +pcStart) pcStart = cap;
+    let block = slots.filter(r=> +r.from>=+pcStart && +r.from<+spikeStart);
+    if(block.length){
+      const bmin = Math.min(...block.map(r=>r.price));
+      const ramp = s.expMult*bmin;                                            // "massively more expensive"
+      while(block.length>2 && block[block.length-1].price > ramp) block.pop();  // trim ramp into the spike
+      while(block.length>2 && block[0].price > ramp) block.shift();            // trim pricey lead-in
+      const avg = block.reduce((a,x)=>a+x.price,0)/block.length;
+      plan.preCool = {start:block[0].from, end:block[block.length-1].to, avg,
+                      reachesSpike: +block[block.length-1].to === +spikeStart};
+    } else plan.preCool = null;
+    plan.avoidFrom = spikeStart; plan.avoidTo = londonAt(now,"19:00");
+    const avoidSlots = slots.filter(r=> +r.from>=+plan.avoidFrom && +r.from<+plan.avoidTo);
+    plan.avoidAvg = avoidSlots.length ? avoidSlots.reduce((a,r)=>a+r.price,0)/avoidSlots.length : null;
+  }
+  return plan;
+}
+
+/* ---------- Rendering ---------- */
+const $ = id=>document.getElementById(id);
+function el(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; }
+function p(x){ return (x>=0? x.toFixed(1) : x.toFixed(1)) + "p"; }
+function poundEst(avg, kwh){ if(!kwh||kwh<=0) return ""; return ` · ~£${(avg*kwh/100).toFixed(2)}/run`; }
+
+function recBlock(label, win, kwh, opts){
+  opts=opts||{};
+  if(!win){ const e=el("div","rec"); e.innerHTML=`<div class="lbl">${label}</div><div class="meta">No window fits the time available — too late to finish in time, or prices not published yet.</div>`; return e; }
+  const flag = win.startPrice > win.avg*1.4;
+  const e=el("div","rec"+(flag?" flag":""));
+  const finishTxt = opts.showFinish!==false ? ` → ${fmtTime(win.end)}` : "";
+  e.innerHTML =
+    `<div class="lbl">${label}</div>`+
+    `<div class="big">Start ${fmtTime(win.start)}${finishTxt} `+
+      `<span class="unit">avg ${p(win.avg)}/kWh${poundEst(win.avg,kwh)}</span></div>`+
+    `<div class="meta"><span class="chip">starts at ${p(win.startPrice)}</span>`+
+      `${flag?'<span style="color:var(--warn)">⚠ pricey first slot</span>':'first-slot price'}</div>`;
+  return e;
+}
+
+function applianceCard(name, emoji, durH, kwh, slots, now, deadline, s){
+  const card=el("div","card");
+  card.appendChild(el("h2", null, `${emoji} ${name}`));
+  card.appendChild(el("p","sub", `${durH}h run · finish by ${deadline.by} (${deadline.weekend?"weekend":"weekday"}, ${fmtDay(deadline.time)})`));
+
+  const overnight = bestWindows(slots, durH, now, deadline.time, s.granularity);
+  card.appendChild(recBlock("Best overnight (by deadline)", overnight[0], kwh));
+  if(overnight.length>1){
+    const alts=el("div","alts","Other good starts: "+
+      overnight.slice(1,4).map(w=>`<span>${fmtTime(w.start)} (${p(w.avg)})</span>`).join(""));
+    card.appendChild(alts);
+  }
+
+  // Extra daytime run: only during active hours, must finish by the latest-finish time
+  const dayFrom = londonAt(now, s.dayFrom), dayTo = londonAt(now, s.dayTo);
+  const extraBy = londonAt(now, s.extraBy);
+  const inDay = +now >= +dayFrom && +now <= +dayTo;
+  if(inDay){
+    const extra = bestWindows(slots, durH, now, extraBy, s.granularity);
+    const soon = soonestWindow(slots, durH, now, extraBy);
+    card.appendChild(recBlock(`Extra run today (finish by ${s.extraBy})`, extra[0], kwh));
+    if(soon && extra[0] && +soon.start !== +extra[0].start){
+      card.appendChild(el("div","alts",
+        `Soonest possible: <span>start ${fmtTime(soon.start)} → ${fmtTime(soon.end)} (avg ${p(soon.avg)})</span>`));
+    }
+  } else {
+    card.appendChild(el("div","alts",
+      `Extra daytime run only shown ${s.dayFrom}–${s.dayTo} (it must finish by ${s.extraBy}).`));
+  }
+  return card;
+}
+
+function airconCard(plan){
+  const card=el("div","card");
+  const h=el("h2"); h.innerHTML="❄️ Air conditioner ";
+  card.appendChild(h);
+  if(!plan){ card.appendChild(el("p","sub","Not enough price data for today yet.")); return card; }
+  h.appendChild(el("span","pill "+(plan.expensive?"exp":"normal"), plan.expensive?"Expensive day":"Normal day"));
+  card.appendChild(el("p","sub",
+    `Evening peak ${p(plan.peak.price)} at ${fmtTime(plan.peak.time)} · today's median ${p(plan.median)}`));
+
+  if(!plan.expensive){
+    const r=el("div","rec");
+    const pricey = plan.comfortAvg!=null && plan.comfortAvg>plan.resumeCap;
+    r.innerHTML=`<div class="lbl">Recommendation</div>`+
+      `<div class="big">Run ${plan.acFrom}–${plan.acTo} <span class="unit">avg ${plan.comfortAvg!=null?p(plan.comfortAvg):"–"}/kWh</span>`+
+        `<span class="pill ${pricey?"exp":"normal"}">${pricey?"pricey":"normal"}</span></div>`+
+      `<div class="meta">Prices are normal — your usual set-and-forget evening run is fine.</div>`;
+    card.appendChild(r);
+  } else {
+    const steps=el("div");
+    const mk=(cls,n,title,d)=>{ const s=el("div","ac-step "+cls); s.innerHTML=
+      `<div class="n">${n}</div><div class="t"><b>${title}</b><div class="d">${d}</div></div>`; return s; };
+    if(plan.preCool) steps.appendChild(mk("cool","✓",
+      `Pre-cool ${fmtTime(plan.preCool.start)}–${fmtTime(plan.preCool.end)}`,
+      `${plan.preCool.reachesSpike
+        ? "Runs right up to the spike so the room's coldest when it hits"
+        : "Cheapest run before the spike — later slots ramped up too much to be worth it"}`+
+      ` · avg ${p(plan.preCool.avg)}/kWh.`));
+    steps.appendChild(mk("avoid","✕",
+      `Avoid ${fmtTime(plan.avoidFrom)}–${fmtTime(plan.avoidTo)}`,
+      `The expensive spike${plan.avoidAvg!=null?` · avg ${p(plan.avoidAvg)}/kWh`:""}. Let the room coast.`));
+    if(plan.nightRun){
+      const hrs = Math.round((+plan.nightRun.end - +plan.nightRun.start)/3600e3);
+      steps.appendChild(mk("","↻",
+        `Trigger ${plan.acTo} (overnight) <span class="pill ${plan.nightRun.pricey?"exp":"normal"}">${plan.nightRun.pricey?"pricey":"ok"}</span>`,
+        `Switch it on for the night · avg ${p(plan.nightRun.avg)}/kWh over the first ${hrs}h`+
+        `${plan.nightRun.pricey?` — still above your ${plan.resumeCap}p cap, but it's your latest trigger time`:` — within your ${plan.resumeCap}p cap`}.`));
+    } else steps.appendChild(mk("","↻",
+      `Trigger ${plan.acTo} (overnight)`,
+      `Switch it on for the night — overnight prices not published yet.`));
+    card.appendChild(steps);
+    card.appendChild(el("p","sub","Guidance only — cooling carry-over depends on your room; adjust to taste."));
+  }
+  return card;
+}
+
+/* ---------- At-a-glance summary table ---------- */
+function renderSummary(w, d, ac, s, deadline){
+  const row=(emoji,name,win)=> win
+    ? `<tr><td class="ap">${emoji} ${name}</td><td class="when">${fmtTime(win.start)} → ${fmtTime(win.end)}</td>`+
+      `<td class="pr"><b>${p(win.avg)}</b></td></tr>`
+    : `<tr><td class="ap">${emoji} ${name}</td><td class="when" style="color:var(--muted);font-weight:400">awaiting tomorrow's prices</td>`+
+      `<td class="pr">—</td></tr>`;
+  let acWhen, acPr="—";
+  if(!ac){ acWhen='<span style="color:var(--muted);font-weight:400">no data yet</span>'; }
+  else if(!ac.expensive){
+    const pricey = ac.comfortAvg!=null && ac.comfortAvg>ac.resumeCap;
+    acWhen=`Run ${ac.acFrom}–${ac.acTo}<span class="pill ${pricey?"exp":"normal"}">${pricey?"pricey":"normal"}</span>`;
+    if(ac.comfortAvg!=null) acPr=`<b>${p(ac.comfortAvg)}</b>`;
+  } else {
+    acWhen=`${ac.preCool?`Pre-cool ${fmtTime(ac.preCool.start)}–${fmtTime(ac.preCool.end)}, then `:""}`+
+      `trigger ${ac.acTo}<span class="pill ${ac.nightRun&&!ac.nightRun.pricey?"normal":"exp"}">${ac.nightRun&&!ac.nightRun.pricey?"ok":"pricey"}</span>`;
+    if(ac.nightRun) acPr=`<b>${p(ac.nightRun.avg)}</b>`;
+  }
+  $("summary").innerHTML =
+    `<div class="card summary">`+
+    `<h2>At a glance</h2>`+
+    `<p class="cap">Best single run · finish by ${deadline.by} (${deadline.weekend?"weekend":"weekday"}) · avg p/kWh</p>`+
+    `<table>`+
+      row("🧺","Washing machine",w)+
+      row("🍽️","Dishwasher",d)+
+      `<tr><td class="ap">❄️ Air con</td><td class="when">${acWhen}</td><td class="pr">${acPr}</td></tr>`+
+    `</table></div>`;
+}
+
+/* ---------- Chart (inline SVG, no libs) ---------- */
+function priceColor(price, lo, hi){
+  if(price<0) return "#5b8cff";
+  const t = hi>lo ? (price-lo)/(hi-lo) : 0.5;          // 0=cheap 1=dear
+  const hue = 120*(1-Math.min(1,Math.max(0,t)));       // 120 green -> 0 red
+  return `hsl(${hue},70%,48%)`;
+}
+function drawChart(slots, now, deadline, highlights){
+  const wrap=$("chart"); wrap.innerHTML="";
+  const view = slots.filter(r=> +r.to>+now-2*3600e3 && +r.from < +deadline + 12*3600e3);
+  if(view.length<2){ wrap.appendChild(el("p","sub","No data to plot.")); return; }
+  const W=1000, H=240, padB=26, padT=8;
+  const lo=Math.min(0,...view.map(r=>r.price)), hi=Math.max(...view.map(r=>r.price));
+  const bw=W/view.length;
+  const yOf=v=>{ const t=(v-lo)/(hi-lo||1); return padT + (1-t)*(H-padT-padB); };
+  const y0=yOf(Math.max(0,lo));
+  const NS="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(NS,"svg");
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`); svg.setAttribute("preserveAspectRatio","none");
+  const hi2 = highlights.map(h=>({a:+h.start,b:+h.end,c:h.color}));
+  view.forEach((r,i)=>{
+    const x=i*bw, top=yOf(r.price), h=Math.abs(top-y0)||1;
+    const rect=document.createElementNS(NS,"rect");
+    rect.setAttribute("x",x+0.5); rect.setAttribute("width",bw-1);
+    rect.setAttribute("y",Math.min(top,y0)); rect.setAttribute("height",h);
+    rect.setAttribute("fill",priceColor(r.price,lo,hi));
+    const inHi=hi2.find(z=> +r.from>=z.a && +r.from<z.b);
+    rect.setAttribute("opacity", inHi?1:0.45);
+    svg.appendChild(rect);
+    if(inHi){ const t=document.createElementNS(NS,"rect");
+      t.setAttribute("x",x+0.5);t.setAttribute("width",bw-1);t.setAttribute("y",Math.min(top,y0)-2);
+      t.setAttribute("height",3);t.setAttribute("fill",inHi.c); svg.appendChild(t); }
+    // hour labels every 6 slots (3h)
+    if(londonParts(r.from).minute==="00" && +londonParts(r.from).hour%3===0){
+      const tx=document.createElementNS(NS,"text");
+      tx.setAttribute("x",x+bw/2); tx.setAttribute("y",H-9); tx.setAttribute("fill","#9aa6b8");
+      tx.setAttribute("font-size","20"); tx.setAttribute("text-anchor","middle");
+      tx.textContent=fmtTime(r.from); svg.appendChild(tx);
+    }
+  });
+  // now line
+  const nx=((+now - +view[0].from)/(+view[view.length-1].to - +view[0].from))*W;
+  if(nx>=0&&nx<=W){ const ln=document.createElementNS(NS,"line");
+    ln.setAttribute("x1",nx);ln.setAttribute("x2",nx);ln.setAttribute("y1",padT);ln.setAttribute("y2",H-padB);
+    ln.setAttribute("stroke","#fff");ln.setAttribute("stroke-width","2");ln.setAttribute("stroke-dasharray","4 3");
+    svg.appendChild(ln); }
+  // zero baseline if negatives
+  if(lo<0){ const zl=document.createElementNS(NS,"line");
+    zl.setAttribute("x1",0);zl.setAttribute("x2",W);zl.setAttribute("y1",yOf(0));zl.setAttribute("y2",yOf(0));
+    zl.setAttribute("stroke","#5b8cff");zl.setAttribute("stroke-width","1");zl.setAttribute("opacity","0.6");
+    svg.appendChild(zl); }
+  // hover/tap cursor highlight
+  const cursor=document.createElementNS(NS,"rect");
+  cursor.setAttribute("y",padT); cursor.setAttribute("height",H-padB-padT);
+  cursor.setAttribute("fill","#ffffff"); cursor.setAttribute("opacity","0.14");
+  cursor.setAttribute("width",bw); cursor.setAttribute("x",-9999);
+  svg.appendChild(cursor);
+  wrap.appendChild(svg);
+
+  // ---- interaction: show price for the chunk under the pointer/finger ----
+  const tip=$("chartTip");
+  function showAt(clientX){
+    const r=svg.getBoundingClientRect();
+    let frac=(clientX-r.left)/r.width; frac=Math.min(0.9999,Math.max(0,frac));
+    const idx=Math.floor(frac*view.length); const slot=view[idx]; if(!slot) return;
+    cursor.setAttribute("x", idx*bw);
+    const cr=$("chartCard").getBoundingClientRect();
+    const centre=r.left + ((idx+0.5)/view.length)*r.width - cr.left;
+    const px=Math.min(cr.width-8, Math.max(8, centre));
+    tip.style.left=px+"px";
+    tip.style.top=(r.top-cr.top)+"px";
+    tip.innerHTML=`${fmtTime(slot.from)}–${fmtTime(slot.to)} · <span class="tprice">${slot.price.toFixed(2)}p</span>`;
+    tip.style.opacity="1";
+  }
+  function hide(){ tip.style.opacity="0"; cursor.setAttribute("x",-9999); }
+  svg.addEventListener("pointermove", e=>showAt(e.clientX));
+  svg.addEventListener("pointerdown", e=>{ showAt(e.clientX); });
+  svg.addEventListener("pointerleave", hide);
+  svg.addEventListener("pointercancel", hide);
+}
+
+/* ---------- Settings form ---------- */
+function fillForm(s){
+  const sel=$("setRegion"); sel.innerHTML="";
+  for(const k of Object.keys(REGIONS)){ const o=el("option"); o.value=k; o.textContent=`${k} — ${REGIONS[k]}`; sel.appendChild(o); }
+  sel.value=s.region;
+  $("setProduct").value=s.product;
+  $("setWashDur").value=s.washDur; $("setDishDur").value=s.dishDur;
+  $("setWashKwh").value=s.washKwh; $("setDishKwh").value=s.dishKwh;
+  $("setWeekdayBy").value=s.weekdayBy; $("setWeekendBy").value=s.weekendBy;
+  $("setGranularity").value=String(s.granularity);
+  $("setExtraBy").value=s.extraBy; $("setDayFrom").value=s.dayFrom; $("setDayTo").value=s.dayTo;
+  $("setAcFrom").value=s.acFrom; $("setAcTo").value=s.acTo;
+  $("setPreFrom").value=s.preFrom; $("setPreCoolHours").value=s.preCoolHours;
+  $("setExpMult").value=s.expMult; $("setExpAbs").value=s.expAbs; $("setResumeCap").value=s.resumeCap;
+}
+function readForm(){
+  const num=(id,d)=>{ const v=parseFloat($(id).value); return isNaN(v)?d:v; };
+  return {
+    region:$("setRegion").value, product:$("setProduct").value.trim()||DEFAULTS.product,
+    washDur:num("setWashDur",2.5), dishDur:num("setDishDur",3.5),
+    washKwh:$("setWashKwh").value, dishKwh:$("setDishKwh").value,
+    weekdayBy:$("setWeekdayBy").value||"07:00", weekendBy:$("setWeekendBy").value||"08:00",
+    granularity:parseInt($("setGranularity").value,10)||60,
+    extraBy:$("setExtraBy").value||"22:00", dayFrom:$("setDayFrom").value||"07:00", dayTo:$("setDayTo").value||"19:00",
+    acFrom:$("setAcFrom").value||"19:00", acTo:$("setAcTo").value||"22:00",
+    preFrom:$("setPreFrom").value||"12:00", preCoolHours:num("setPreCoolHours",3),
+    expMult:num("setExpMult",1.8), expAbs:num("setExpAbs",30), resumeCap:num("setResumeCap",25)
+  };
+}
+
+/* ---------- Main ---------- */
+async function render(){
+  const s=loadSettings();
+  $("regionLabel").textContent = `· ${REGIONS[s.region]||s.region}`;
+  $("statusLine").innerHTML='<span class="spin"></span> Fetching…';
+
+  let slots, fromCache=false, cacheAt=null, err=null;
+  try{ slots = await fetchRates(s); }
+  catch(e){
+    err=e.message;
+    const c=loadCache();
+    if(c && c.region===s.region){ slots=c.rates; fromCache=true; cacheAt=c.at; }
+  }
+
+  const banner=$("banner"), bt=$("bannerText"), cards=$("cards");
+  cards.innerHTML="";
+
+  if(!slots){
+    banner.className="banner err"; banner.querySelector(".ico").textContent="⚠";
+    bt.textContent="Couldn't load prices"+(err?`: ${err}`:"")+". Check your connection and Refresh.";
+    $("statusLine").textContent="Offline";
+    return;
+  }
+
+  const now=new Date();
+  const deadline=nextDeadline(now, s);
+  const lastSlotEnd = slots[slots.length-1].to;
+  const haveTomorrow = +lastSlotEnd >= +deadline.time;
+
+  // Banner: price availability
+  if(err){
+    banner.className="banner wait"; banner.querySelector(".ico").textContent="⚠";
+    bt.innerHTML=`Showing cached prices from ${cacheAt?fmtTime(new Date(cacheAt)):"earlier"} (live fetch failed). Tap Refresh to retry.`;
+  } else if(haveTomorrow){
+    banner.className="banner ok"; banner.querySelector(".ico").textContent="✓";
+    bt.innerHTML=`Prices are in through <b>${fmtTime(lastSlotEnd)} ${fmtDay(lastSlotEnd)}</b> — full overnight plan below.`;
+  } else {
+    banner.className="banner wait"; banner.querySelector(".ico").textContent="⏳";
+    bt.innerHTML=`Prices only go to <b>${fmtTime(lastSlotEnd)}</b> — tomorrow's aren't published yet (usually after ~4pm). `+
+      `<b>Check back later</b> for the full overnight plan. The "extra run now" suggestions below still work.`;
+  }
+
+  // Best single overnight run for each (shared by summary + chart)
+  const wOv=bestWindows(slots,s.washDur,now,deadline.time,s.granularity)[0];
+  const dOv=bestWindows(slots,s.dishDur,now,deadline.time,s.granularity)[0];
+  const ac=airconPlan(slots, now, s);
+
+  // At-a-glance summary table
+  renderSummary(wOv, dOv, ac, s, deadline);
+
+  // Cards (full detail)
+  cards.appendChild(applianceCard("Washing machine","🧺", s.washDur, parseFloat(s.washKwh), slots, now, deadline, s));
+  cards.appendChild(applianceCard("Dishwasher","🍽️", s.dishDur, parseFloat(s.dishKwh), slots, now, deadline, s));
+  cards.appendChild(airconCard(ac));
+
+  // Chart highlights = best overnight windows + aircon blocks
+  const hi=[];
+  if(wOv) hi.push({start:wOv.start,end:wOv.end,color:"#5b8cff"});
+  if(dOv) hi.push({start:dOv.start,end:dOv.end,color:"#34d399"});
+  if(ac&&ac.preCool) hi.push({start:ac.preCool.start,end:ac.preCool.end,color:"#34d399"});
+  drawChart(slots, now, deadline.time, hi);
+  $("chartSub").innerHTML=`p/kWh inc VAT · Europe/London · `+
+    `<span style="color:#5b8cff">washer</span> / <span style="color:#34d399">dishwasher &amp; pre-cool</span> windows marked · `+
+    `<em>tap/hover a bar for its price</em>`;
+
+  $("statusLine").innerHTML = fromCache ? `cached prices` : `updated ${fmtTime(now)}`;
+}
+
+/* ---------- Events ---------- */
+$("refreshBtn").onclick=()=>render();
+$("saveBtn").onclick=()=>{ saveSettings(readForm()); $("settings").open=false; render(); };
+$("resetBtn").onclick=()=>{ if(confirm("Reset all settings to defaults?")){ saveSettings({...DEFAULTS}); fillForm(loadSettings()); render(); } };
+$("lookupBtn").onclick=async()=>{
+  const pc=$("setPostcode").value.replace(/\s+/g,"").toUpperCase();
+  const hint=$("lookupHint");
+  if(!pc){ hint.textContent="Enter a postcode first."; return; }
+  hint.innerHTML='<span class="spin"></span> Looking up…';
+  try{
+    const r=await fetch(`https://api.octopus.energy/v1/industry/grid-supply-points/?postcode=${pc}`);
+    const j=await r.json();
+    const g=j.results&&j.results[0]&&j.results[0].group_id;
+    if(g){ const code=g.replace("_",""); $("setRegion").value=code;
+      hint.innerHTML=`✓ ${pc} → region <b>${code}</b> (${REGIONS[code]||"?"}). Save to apply.`; }
+    else hint.textContent="No region found for that postcode.";
+  }catch(e){ hint.textContent="Lookup failed — pick your region manually."; }
+};
+
+/* boot */
+fillForm(loadSettings());
+render();
+</script>
+</body>
+</html>
