@@ -191,11 +191,10 @@
       <label class="f">Latest time to trigger
         <input id="setAcTo" type="time">
       </label>
-      <label class="f">Pre-cool earliest start
-        <input id="setPreFrom" type="time">
-      </label>
-      <label class="f">Pre-cool length (h)
-        <input id="setPreCoolHours" type="number" step="0.5" min="0.5">
+      <label class="f full">Afternoon benchmark window (a price you'd accept)
+        <div class="row">
+          <input id="setBenchFrom" type="time"><span>–</span><input id="setBenchTo" type="time">
+        </div>
       </label>
       <label class="f">Expensive if peak ≥ ×median
         <input id="setExpMult" type="number" step="0.1" min="1">
@@ -224,7 +223,7 @@
 <script>
 "use strict";
 
-const APP_VERSION = "v1.0.0 · 2026-06-24";   // bump on each deploy so a refresh shows the new build
+const APP_VERSION = "v1.1.0 · 2026-06-24";   // bump on each deploy so a refresh shows the new build
 
 /* ---------- Settings ---------- */
 const DEFAULTS = {
@@ -232,7 +231,7 @@ const DEFAULTS = {
   washDur:2.5, dishDur:3.5, washKwh:"", dishKwh:"",
   weekdayBy:"07:00", weekendBy:"08:00", granularity:60,
   dayFrom:"07:00", dayTo:"19:00", extraBy:"22:00",
-  acFrom:"19:00", acTo:"22:00", preFrom:"12:00", preCoolHours:3,
+  acFrom:"19:00", acTo:"22:00", benchFrom:"14:00", benchTo:"16:00",
   expMult:1.8, expAbs:30, resumeCap:25
 };
 const REGIONS = {
@@ -381,40 +380,41 @@ function airconPlan(slots, now, s){
   let peak=null; for(const r of peakWin) if(!peak || r.price>peak.price) peak=r;
   if(!peak) return null;
 
-  const comfortSlots = slots.filter(r=> +r.from>=+londonAt(now,s.acFrom) && +r.from<+londonAt(now,s.acTo));
+  const acFromT = londonAt(now, s.acFrom), acToT = londonAt(now, s.acTo);
+  const comfortSlots = slots.filter(r=> +r.from>=+acFromT && +r.from<+acToT);
   const comfortAvg = comfortSlots.length ? comfortSlots.reduce((a,r)=>a+r.price,0)/comfortSlots.length : null;
-  // Overnight run triggered at the latest trigger time (acTo), regardless of price.
-  const triggerAt = londonAt(now, s.acTo);
-  const runLen = (hm(s.acTo).h*60+hm(s.acTo).m) - (hm(s.acFrom).h*60+hm(s.acFrom).m);  // window length
-  const nightRun = triggerRun(slots, triggerAt, runLen, s.resumeCap);
+  const runLen = (hm(s.acTo).h*60+hm(s.acTo).m) - (hm(s.acFrom).h*60+hm(s.acFrom).m);  // run-window length
 
   const expensive = peak.price >= s.expMult*med || peak.price >= s.expAbs;
 
   const plan = { expensive, median:med, peak:{price:peak.price, time:peak.from},
-                 comfortAvg, acFrom:s.acFrom, acTo:s.acTo, nightRun, resumeCap:s.resumeCap };
+                 comfortAvg, acFrom:s.acFrom, acTo:s.acTo, resumeCap:s.resumeCap };
 
-  if(expensive){
-    // Pre-cool should run RIGHT UP TO the spike so the room is coldest when it hits.
-    // Take the block ending at the spike start (capped at preCoolHours, no earlier than preFrom),
-    // then only trim slots that ramp up "massively" (> expMult × the cheapest slot in the block).
-    const spikeStart = londonAt(now,"16:00");
-    let pcStart = londonAt(now, s.preFrom);
-    const cap = new Date(+spikeStart - s.preCoolHours*3600e3);
-    if(+cap > +pcStart) pcStart = cap;
-    let block = slots.filter(r=> +r.from>=+pcStart && +r.from<+spikeStart);
-    if(block.length){
-      const bmin = Math.min(...block.map(r=>r.price));
-      const ramp = s.expMult*bmin;                                            // "massively more expensive"
-      while(block.length>2 && block[block.length-1].price > ramp) block.pop();  // trim ramp into the spike
-      while(block.length>2 && block[0].price > ramp) block.shift();            // trim pricey lead-in
-      const avg = block.reduce((a,x)=>a+x.price,0)/block.length;
-      plan.preCool = {start:block[0].from, end:block[block.length-1].to, avg,
-                      reachesSpike: +block[block.length-1].to === +spikeStart};
-    } else plan.preCool = null;
-    plan.avoidFrom = spikeStart; plan.avoidTo = londonAt(now,"19:00");
-    const avoidSlots = slots.filter(r=> +r.from>=+plan.avoidFrom && +r.from<+plan.avoidTo);
-    plan.avoidAvg = avoidSlots.length ? avoidSlots.reduce((a,r)=>a+r.price,0)/avoidSlots.length : null;
+  if(!expensive){
+    // Normal day: turn on at the evening start and leave it overnight.
+    plan.highlight = { start:acFromT, end:acToT };
+    return plan;
   }
+
+  // Expensive day: pre-cooling early doesn't hold (room heats straight back up), so instead bring the
+  // turn-on time forward from the latest trigger only while each 30-min slot beats an afternoon
+  // benchmark — a price you'd happily pay (default the 14:00–16:00 average).
+  const benchSlots = slots.filter(r=> +r.from>=+londonAt(now,s.benchFrom) && +r.from<+londonAt(now,s.benchTo));
+  const benchAvg = benchSlots.length ? benchSlots.reduce((a,r)=>a+r.price,0)/benchSlots.length : null;
+  plan.benchmark = benchAvg!=null ? { avg:benchAvg, from:s.benchFrom, to:s.benchTo } : null;
+
+  let onTime = acToT;
+  if(benchAvg!=null){
+    const evening = slots.filter(r=> +r.from>=+acFromT && +r.from<+acToT);  // ascending, contiguous half-hours
+    for(let i=evening.length-1; i>=0; i--){            // walk back from the latest trigger
+      if(evening[i].price < benchAvg) onTime = evening[i].from;
+      else break;                                      // first slot dearer than the benchmark stops it
+    }
+  }
+  plan.onTime = onTime;
+  plan.broughtForward = +onTime < +acToT;
+  plan.onRun = triggerRun(slots, onTime, runLen, s.resumeCap);   // cost from the on-time over the run window
+  plan.highlight = { start:onTime, end: plan.onRun ? plan.onRun.end : acToT };
   return plan;
 }
 
@@ -489,28 +489,24 @@ function airconCard(plan){
       `<div class="meta">Prices are normal — your usual set-and-forget evening run is fine.</div>`;
     card.appendChild(r);
   } else {
-    const steps=el("div");
-    const mk=(cls,n,title,d)=>{ const s=el("div","ac-step "+cls); s.innerHTML=
-      `<div class="n">${n}</div><div class="t"><b>${title}</b><div class="d">${d}</div></div>`; return s; };
-    if(plan.preCool) steps.appendChild(mk("cool","✓",
-      `Pre-cool ${fmtTime(plan.preCool.start)}–${fmtTime(plan.preCool.end)}`,
-      `${plan.preCool.reachesSpike
-        ? "Runs right up to the spike so the room's coldest when it hits"
-        : "Cheapest run before the spike — later slots ramped up too much to be worth it"}`+
-      ` · avg ${p(plan.preCool.avg)}/kWh.`));
-    steps.appendChild(mk("avoid","✕",
-      `Avoid ${fmtTime(plan.avoidFrom)}–${fmtTime(plan.avoidTo)}`,
-      `The expensive spike${plan.avoidAvg!=null?` · avg ${p(plan.avoidAvg)}/kWh`:""}. Let the room coast.`));
-    if(plan.nightRun){
-      const hrs = Math.round((+plan.nightRun.end - +plan.nightRun.start)/3600e3);
-      steps.appendChild(mk("","↻",
-        `Trigger ${plan.acTo} (overnight) <span class="pill ${plan.nightRun.pricey?"exp":"normal"}">${plan.nightRun.pricey?"pricey":"ok"}</span>`,
-        `Switch it on for the night · avg ${p(plan.nightRun.avg)}/kWh over the first ${hrs}h`+
-        `${plan.nightRun.pricey?` — still above your ${plan.resumeCap}p cap, but it's your latest trigger time`:` — within your ${plan.resumeCap}p cap`}.`));
-    } else steps.appendChild(mk("","↻",
-      `Trigger ${plan.acTo} (overnight)`,
-      `Switch it on for the night — overnight prices not published yet.`));
-    card.appendChild(steps);
+    const run = plan.onRun;
+    const onStr = plan.onTime ? fmtTime(plan.onTime) : plan.acTo;
+    const hrs = run ? Math.round((+run.end - +run.start)/3600e3) : null;
+    const pricey = run ? run.pricey : true;
+    let meta;
+    if(plan.broughtForward && plan.benchmark){
+      meta = `Start early and leave it overnight — every 30 min back to ${onStr} is cheaper than the ${p(plan.benchmark.avg)} afternoon benchmark (${plan.benchmark.from}–${plan.benchmark.to}). Cooling earlier than that doesn't hold, so just get on as soon as it's cheap.`;
+    } else if(plan.benchmark){
+      meta = `The evening never drops below the ${p(plan.benchmark.avg)} afternoon benchmark (${plan.benchmark.from}–${plan.benchmark.to}) before ${plan.acTo}, so there's no point starting earlier — turn on at ${plan.acTo} and leave it overnight.`;
+    } else {
+      meta = `Turn on and leave it overnight (afternoon benchmark not available yet).`;
+    }
+    const r=el("div","rec"+(pricey?" flag":""));
+    r.innerHTML=`<div class="lbl">Recommendation</div>`+
+      `<div class="big">Turn on ${onStr}${run?` <span class="unit">avg ${p(run.avg)}/kWh, first ${hrs}h</span>`:""}`+
+        `<span class="pill ${pricey?"exp":"normal"}">${pricey?"pricey":"ok"}</span></div>`+
+      `<div class="meta">${meta}</div>`;
+    card.appendChild(r);
     card.appendChild(el("p","sub","Guidance only — cooling carry-over depends on your room; adjust to taste."));
   }
   return card;
@@ -530,9 +526,10 @@ function renderSummary(w, d, ac, s, deadline){
     acWhen=`Run ${ac.acFrom}–${ac.acTo}<span class="pill ${pricey?"exp":"normal"}">${pricey?"pricey":"normal"}</span>`;
     if(ac.comfortAvg!=null) acPr=`<b>${p(ac.comfortAvg)}</b>`;
   } else {
-    acWhen=`${ac.preCool?`Pre-cool ${fmtTime(ac.preCool.start)}–${fmtTime(ac.preCool.end)}, then `:""}`+
-      `trigger ${ac.acTo}<span class="pill ${ac.nightRun&&!ac.nightRun.pricey?"normal":"exp"}">${ac.nightRun&&!ac.nightRun.pricey?"ok":"pricey"}</span>`;
-    if(ac.nightRun) acPr=`<b>${p(ac.nightRun.avg)}</b>`;
+    const onStr = ac.onTime ? fmtTime(ac.onTime) : ac.acTo;
+    const pricey = ac.onRun ? ac.onRun.pricey : true;
+    acWhen=`Turn on ${onStr}<span class="pill ${pricey?"exp":"normal"}">${pricey?"pricey":"ok"}</span>`;
+    if(ac.onRun) acPr=`<b>${p(ac.onRun.avg)}</b>`;
   }
   $("summary").innerHTML =
     `<div class="card summary">`+
@@ -638,7 +635,7 @@ function fillForm(s){
   $("setGranularity").value=String(s.granularity);
   $("setExtraBy").value=s.extraBy; $("setDayFrom").value=s.dayFrom; $("setDayTo").value=s.dayTo;
   $("setAcFrom").value=s.acFrom; $("setAcTo").value=s.acTo;
-  $("setPreFrom").value=s.preFrom; $("setPreCoolHours").value=s.preCoolHours;
+  $("setBenchFrom").value=s.benchFrom; $("setBenchTo").value=s.benchTo;
   $("setExpMult").value=s.expMult; $("setExpAbs").value=s.expAbs; $("setResumeCap").value=s.resumeCap;
 }
 function readForm(){
@@ -651,7 +648,7 @@ function readForm(){
     granularity:parseInt($("setGranularity").value,10)||60,
     extraBy:$("setExtraBy").value||"22:00", dayFrom:$("setDayFrom").value||"07:00", dayTo:$("setDayTo").value||"19:00",
     acFrom:$("setAcFrom").value||"19:00", acTo:$("setAcTo").value||"22:00",
-    preFrom:$("setPreFrom").value||"12:00", preCoolHours:num("setPreCoolHours",3),
+    benchFrom:$("setBenchFrom").value||"14:00", benchTo:$("setBenchTo").value||"16:00",
     expMult:num("setExpMult",1.8), expAbs:num("setExpAbs",30), resumeCap:num("setResumeCap",25)
   };
 }
@@ -715,7 +712,7 @@ async function render(){
   const hi=[];
   if(wOv) hi.push({start:wOv.start,end:wOv.end,color:"#5b8cff"});
   if(dOv) hi.push({start:dOv.start,end:dOv.end,color:"#34d399"});
-  if(ac&&ac.preCool) hi.push({start:ac.preCool.start,end:ac.preCool.end,color:"#34d399"});
+  if(ac&&ac.highlight) hi.push({start:ac.highlight.start,end:ac.highlight.end,color:"#34d399"});
   drawChart(slots, now, deadline.time, hi);
   $("chartSub").innerHTML=`p/kWh inc VAT · Europe/London · `+
     `<span style="color:#5b8cff">washer</span> / <span style="color:#34d399">dishwasher &amp; pre-cool</span> windows marked · `+

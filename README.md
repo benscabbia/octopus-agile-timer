@@ -29,8 +29,7 @@ appliance, so you can eyeball it in a second. Scroll down for the full detail.
 **Air conditioner** — auto-detects the kind of day:
 
 - **Normal day:** "Run 19:00–22:00" (your usual set-and-forget).
-- **Expensive day:** a 3-step plan — **pre-cool** running *right up to the spike* (so the room is coldest when it hits; it only stops early if the pre-spike slots ramp up steeply), **avoid** the spike, then **trigger the overnight run** — each step with its average price.
-- **Trigger at your latest trigger time, with the cost shown:** you switch the AC on at the latest trigger time (the end of the run window, default 22:00) and leave it overnight. This step always shows the **cost from that time** (averaged over the first few hours, when it's priciest) and tags it **"pricey"** or **"ok"** depending on whether that average is above your cap (default 25 p/kWh). So on an expensive day you still get told to switch it on at the trigger time — you just see exactly what it'll cost.
+- **Expensive day:** pre-cooling early doesn't help (the room heats straight back up), so it finds the **earliest worthwhile time to switch on before your latest trigger time** and leave it running overnight. Starting from the latest trigger (default 22:00) it walks back in 30-minute steps, keeping each slot that's **cheaper than an afternoon benchmark** (a price you'd happily pay, default the 14:00–16:00 average) and stopping at the first slot that isn't. If even the slot before the trigger is pricier than the benchmark, it just tells you to turn on at the trigger time. The recommended on-time is tagged **"pricey"** or **"ok"** vs your cap (default 25 p/kWh).
 
 **Price curve** — a colour-coded chart (green = cheap → red = expensive, blue = negative) with your recommended windows highlighted and a "now" marker.
 
@@ -55,10 +54,9 @@ suggestions keep working regardless.
 - **Extra run must finish by** — latest-finish time for daytime extra loads (default 22:00).
 - **Extra-run active hours** — when an extra-run suggestion is shown (default 07:00–19:00).
 - **Start granularity** — on the hour (matches most appliance delay timers) or every 30 min.
-- **Aircon** — evening start + **latest time to trigger** (the run window; its end is when you switch on for the night), pre-cool earliest start + length,
-  the **"pricey" threshold** (p/kWh above which the overnight run is tagged pricey; default 25),
-  and the "expensive day" thresholds (peak ≥ ×median, or peak ≥ an absolute p/kWh). The pre-cool
-  also uses the ×median multiplier to decide what counts as "ramping up too steeply" to keep running.
+- **Aircon** — evening start + **latest time to trigger** (the run window; its end is the latest you'd switch on for the night), the **afternoon benchmark window** (the price you'd accept; default 14:00–16:00),
+  the **"pricey" threshold** (p/kWh above which the run is tagged pricey; default 25),
+  and the "expensive day" thresholds (peak ≥ ×median, or peak ≥ an absolute p/kWh).
 
 ---
 
