@@ -74,10 +74,11 @@
   .ac-step .t b{font-size:14px}
   .ac-step .t .d{color:var(--muted);font-size:12.5px}
   #chartCard{padding-bottom:8px;position:relative}
-  svg{width:100%;height:auto;display:block;touch-action:pan-y;cursor:crosshair}
+  svg{width:100%;height:auto;display:block;touch-action:pan-y;cursor:crosshair;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
   .chart-tip{position:absolute;pointer-events:none;background:#0c0f15;border:1px solid var(--line);
     border-radius:8px;padding:5px 9px;font-size:12.5px;font-weight:600;white-space:nowrap;
-    transform:translate(-50%,-100%);opacity:0;transition:opacity .08s;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+    opacity:0;transition:opacity .08s;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.4)}
   .chart-tip .tprice{color:var(--accent)}
   .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:6px}
   .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
@@ -223,7 +224,7 @@
 <script>
 "use strict";
 
-const APP_VERSION = "v1.1.0 · 2026-06-24";   // bump on each deploy so a refresh shows the new build
+const APP_VERSION = "v1.1.1 · 2026-06-24";   // bump on each deploy so a refresh shows the new build
 
 /* ---------- Settings ---------- */
 const DEFAULTS = {
@@ -609,12 +610,12 @@ function drawChart(slots, now, deadline, highlights){
     const idx=Math.floor(frac*view.length); const slot=view[idx]; if(!slot) return;
     cursor.setAttribute("x", idx*bw);
     const cr=$("chartCard").getBoundingClientRect();
-    const centre=r.left + ((idx+0.5)/view.length)*r.width - cr.left;
-    const px=Math.min(cr.width-8, Math.max(8, centre));
-    tip.style.left=px+"px";
-    tip.style.top=(r.top-cr.top)+"px";
     tip.innerHTML=`${fmtTime(slot.from)}–${fmtTime(slot.to)} · <span class="tprice">${slot.price.toFixed(2)}p</span>`;
     tip.style.opacity="1";
+    const centre=r.left + ((idx+0.5)/view.length)*r.width - cr.left;
+    const tw=tip.offsetWidth;                                   // clamp the full tooltip within the card
+    tip.style.left=Math.max(4, Math.min(cr.width - tw - 4, centre - tw/2))+"px";
+    tip.style.top=(r.top - cr.top + 6)+"px";                    // just inside the chart's top edge
   }
   function hide(){ tip.style.opacity="0"; cursor.setAttribute("x",-9999); }
   svg.addEventListener("pointermove", e=>showAt(e.clientX));
@@ -715,7 +716,7 @@ async function render(){
   if(ac&&ac.highlight) hi.push({start:ac.highlight.start,end:ac.highlight.end,color:"#34d399"});
   drawChart(slots, now, deadline.time, hi);
   $("chartSub").innerHTML=`p/kWh inc VAT · Europe/London · `+
-    `<span style="color:#5b8cff">washer</span> / <span style="color:#34d399">dishwasher &amp; pre-cool</span> windows marked · `+
+    `<span style="color:#5b8cff">washer</span> / <span style="color:#34d399">dishwasher &amp; aircon</span> windows marked · `+
     `<em>tap/hover a bar for its price</em>`;
 
   $("statusLine").innerHTML = fromCache ? `cached prices` : `updated ${fmtTime(now)}`;
