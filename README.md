@@ -8,6 +8,8 @@ A single self-contained web page that tells you the cheapest times to run your
 - Fetches live prices straight from the public Octopus API in your browser.
 - Works on a laptop and as a phone home-screen bookmark.
 
+**▶ Live app:** https://benscabbia.github.io/octopus-agile-timer/
+
 Defaults to region **A**. Pick your region in Settings (dropdown A–P, or postcode lookup).
 
 ---
@@ -90,9 +92,5 @@ Octopus pricing API allows cross-origin browser requests (`Access-Control-Allow-
 - Aircon advice is **guidance only** — how long cooling lasts depends on your room.
 - Tariff/product code defaults to `AGILE-24-10-01`. If Octopus moves you to a newer
   Agile product and prices stop loading, update **Agile product code** in Settings.
-
-## Possible future add-ons (not built yet)
-- A nightly **email / phone push** (e.g. Pushover/ntfy) from a scheduler with the day's plan.
-- Direct **automation** of appliances via smart plugs / a home-automation system.
 
 *Data from the public Octopus Energy API. For guidance only — not financial advice.*

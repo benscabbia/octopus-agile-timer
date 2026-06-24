@@ -216,12 +216,15 @@
 
   <footer>
     Prices from the public Octopus Energy API · for guidance only, not financial advice.<br>
-    Next-day prices usually publish after ~4pm. All times Europe/London.
+    Next-day prices usually publish after ~4pm. All times Europe/London.<br>
+    <span id="appVersion"></span>
   </footer>
 </div>
 
 <script>
 "use strict";
+
+const APP_VERSION = "v1.0.0 · 2026-06-24";   // bump on each deploy so a refresh shows the new build
 
 /* ---------- Settings ---------- */
 const DEFAULTS = {
@@ -741,6 +744,7 @@ $("lookupBtn").onclick=async()=>{
 };
 
 /* boot */
+$("appVersion").textContent = APP_VERSION;
 fillForm(loadSettings());
 render();
 </script>
