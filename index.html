@@ -225,7 +225,7 @@
 <script>
 "use strict";
 
-const APP_VERSION = "v1.3.1 · 2026-06-26";   // bump on each deploy so a refresh shows the new build
+const APP_VERSION = "v1.3.2 · 2026-06-26";   // bump on each deploy so a refresh shows the new build
 
 /* ---------- Settings ---------- */
 const DEFAULTS = {
@@ -398,31 +398,42 @@ function airconPlan(slots, now, s){
     return plan;
   }
 
-  // Expensive day: binary decision — switch on `earlyHoursBefore` early (e.g. 9pm) OR wait for the
-  // trigger (10pm). Treat the whole early window as one block (its average), since 30-min steps make
-  // virtually no difference. Go early only if that hour is not pricey (< 30p) AND not much dearer
-  // than the trigger-time price (within earlyMargin); otherwise wait.
+  // Expensive day: switch on early (up to `earlyHoursBefore`, e.g. 9pm) OR wait for the trigger (10pm).
+  // Default to the EARLIEST early slot (most cool-down), but shift to a later early slot only if it's
+  // "quite a bit" cheaper (>= earlyMargin) — so a trivial 30-min gap doesn't pull us off the hour.
+  // Then go early only if the resulting run is not pricey (< 30p) AND within earlyMargin of the
+  // trigger-time price; otherwise wait.
   const PRICEY = 30;
   const trigSlot = slots.find(r=> +r.from === +acToT);
   const trigPrice = trigSlot ? trigSlot.price : null;
   const earlyStart = new Date(+acToT - s.earlyHoursBefore*3600e3);
-  const earlySlots = slots.filter(r=> +r.from>=+earlyStart && +r.from<+acToT);
-  const earlyAvg = earlySlots.length ? earlySlots.reduce((a,r)=>a+r.price,0)/earlySlots.length : null;
+  const earlySlots = slots.filter(r=> +r.from>=+earlyStart && +r.from<+acToT);   // ascending: e.g. 9pm, 9:30
+
+  let pickIdx = earlySlots.length ? 0 : -1;
+  for(let i=1; i<earlySlots.length; i++){                        // a later slot wins only if much cheaper
+    if(earlySlots[i].price <= earlySlots[pickIdx].price - s.earlyMargin) pickIdx = i;
+  }
+  const pick = pickIdx>=0 ? earlySlots[pickIdx] : null;
+  const extra = pick ? earlySlots.slice(pickIdx) : [];           // slots you'd run before the trigger
+  const earlyAvg = extra.length ? extra.reduce((a,r)=>a+r.price,0)/extra.length : null;
 
   let onTime = acToT, waitReason = null;
-  if(earlyAvg!=null){
+  if(pick && earlyAvg!=null){
     const notPricey = earlyAvg < PRICEY;
     const close = trigPrice==null || earlyAvg <= trigPrice + s.earlyMargin;
-    if(notPricey && close) onTime = earlyStart;
+    if(notPricey && close) onTime = pick.from;
     else waitReason = !notPricey ? "pricey" : "jump";
   }
 
   plan.onTime = onTime;
   plan.broughtForward = +onTime < +acToT;
   plan.earlyStart = earlyStart;
+  plan.earlyPick = pick ? pick.from : null;
+  plan.shiftedToCheaper = !!(pick && +pick.from > +earlyStart);  // a later slot was quite a bit cheaper
   plan.earlyAvg = earlyAvg;
   plan.trigPrice = trigPrice;
   plan.waitReason = waitReason;
+  plan.candidates = [...earlySlots, ...(trigSlot?[trigSlot]:[])].map(c=>({at:c.from, price:c.price}));
   plan.onRun = triggerRun(slots, onTime, runLen, s.resumeCap);
   plan.highlight = { start:onTime, end: plan.onRun ? plan.onRun.end : acToT };
   return plan;
@@ -513,14 +524,15 @@ function airconCard(plan){
     const onStr = plan.onTime ? fmtTime(plan.onTime) : plan.acTo;
     const hrs = run ? Math.round((+run.end - +run.start)/3600e3) : null;
     const flag = run && priceBand(run.avg).max>30;   // amber-orange/red border
-    const tp = plan.trigPrice, ea = plan.earlyAvg, esStr = fmtTime(plan.earlyStart);
+    const tp = plan.trigPrice, ea = plan.earlyAvg;
     let meta;
     if(plan.broughtForward){
-      meta = `Switch on at ${onStr} for the extra cool-down — the ${esStr}–${plan.acTo} hour averages ${p(ea)}, not pricey and close to the ${tp!=null?p(tp):"–"} ${plan.acTo} price, so getting on early is worth it.`;
+      const cheaper = plan.shiftedToCheaper ? ` (${fmtTime(plan.earlyPick)} is quite a bit cheaper than ${fmtTime(plan.earlyStart)})` : "";
+      meta = `Switch on at ${onStr}${cheaper} — the early run averages ${p(ea)}, not pricey and close to the ${tp!=null?p(tp):"–"} ${plan.acTo} price, so the early cool-down is worth it.`;
     } else if(plan.waitReason==="pricey"){
-      meta = `Wait until ${plan.acTo} — the ${esStr}–${plan.acTo} hour averages ${p(ea)}, which is pricey, so don't pay for the early hour.`;
+      meta = `Wait until ${plan.acTo} — switching on early averages ${p(ea)}, which is pricey, so don't pay for the early run.`;
     } else if(plan.waitReason==="jump"){
-      meta = `Wait until ${plan.acTo} — the ${esStr}–${plan.acTo} hour averages ${p(ea)}, well above the ${tp!=null?p(tp):"–"} ${plan.acTo} price, so wait.`;
+      meta = `Wait until ${plan.acTo} — switching on early averages ${p(ea)}, well above the ${tp!=null?p(tp):"–"} ${plan.acTo} price, so wait.`;
     } else {
       meta = `Turn on at ${onStr} and leave it overnight.`;
     }
@@ -530,9 +542,8 @@ function airconCard(plan){
         `${run?bandPill(run.avg):""}</div>`+
       `<div class="meta">${meta}</div>`;
     card.appendChild(r);
-    if(ea!=null) card.appendChild(el("div","alts",
-      `Options: <span>on ${esStr} → 1h avg <b style="color:${priceBand(ea).color}">${p(ea)}</b></span>`+
-      `<span>wait ${plan.acTo} → <b style="color:${tp!=null?priceBand(tp).color:"var(--muted)"}">${tp!=null?p(tp):"–"}</b></span>`));
+    if(plan.candidates && plan.candidates.length) card.appendChild(el("div","alts",
+      "Options: "+plan.candidates.map(c=>`<span>${fmtTime(c.at)} <b style="color:${priceBand(c.price).color}">${p(c.price)}</b></span>`).join("")));
     card.appendChild(el("p","sub","Guidance only — cooling carry-over depends on your room; adjust to taste."));
   }
   return card;
