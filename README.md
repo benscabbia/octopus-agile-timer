@@ -30,7 +30,7 @@ appliance, so you can eyeball it in a second. Scroll down for the full detail.
 
 - **Price bands:** aircon prices carry a 💡 band — **cheap** (<20 p/kWh), **amber** (20–30), **bit pricey** (30–40), **expensive** (40+) — shown in the card and the at-a-glance table.
 - **Normal day:** "Run 19:00–22:00" (your usual set-and-forget).
-- **Expensive day — when to switch on (9pm vs wait for 10pm):** starting from your latest trigger (default 22:00) it considers switching on as much as an hour early, stepping back in 30-min slots. It keeps stepping earlier only while each slot is **not pricey** (under 30 p/kWh) **and not much dearer than the trigger price** (within a margin, default 8 p/kWh). The first slot that's pricey or a big jump stops it. So a cheap, flat evening → "Turn on 21:00"; prices tumbling into 10pm → "Wait until 22:00". The card lists the 21:00 / 21:30 / 22:00 prices so you can see why, and the recommended time is band-coloured.
+- **Expensive day — switch on early or wait?** A **binary** choice: switch on up to an hour early (default 21:00) **or** wait for the trigger (22:00). It treats the whole early hour as one block (its **average**), since 30-min steps barely differ. It goes early only if that hour is **not pricey** (avg under 30 p/kWh) **and not much dearer than the trigger price** (within a margin, default 8 p/kWh); otherwise it says wait. The card shows both options — early-hour average vs the trigger price — band-coloured.
 
 **Price curve** — a colour-coded chart (green = cheap → red = expensive, blue = negative) with your recommended windows highlighted and a "now" marker.
 
