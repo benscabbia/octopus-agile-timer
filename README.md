@@ -28,9 +28,9 @@ appliance, so you can eyeball it in a second. Scroll down for the full detail.
 
 **Air conditioner** — auto-detects the kind of day:
 
-- **"Switch on 1 h early" price:** prominently shows the price for the hour before your latest trigger (e.g. 21:00) — the on-time that works well in practice — with a 💡 band: **cheap** (<20 p/kWh), **amber** (20–30), **bit pricey** (30–40), **expensive** (40+). This price and band also appear in the at-a-glance table.
+- **Price bands:** aircon prices carry a 💡 band — **cheap** (<20 p/kWh), **amber** (20–30), **bit pricey** (30–40), **expensive** (40+) — shown in the card and the at-a-glance table.
 - **Normal day:** "Run 19:00–22:00" (your usual set-and-forget).
-- **Expensive day:** pre-cooling early doesn't help (the room heats straight back up), so it finds the **earliest worthwhile time to switch on before your latest trigger time** and leave it running overnight. Starting from the latest trigger (default 22:00) it walks back in 30-minute steps, keeping each slot that's **cheaper than an afternoon benchmark** (a price you'd happily pay, default the 14:00–16:00 average) and stopping at the first slot that isn't. If even the slot before the trigger is pricier than the benchmark, it just tells you to turn on at the trigger time. The recommended on-time is tagged **"pricey"** or **"ok"** vs your cap (default 25 p/kWh).
+- **Expensive day — when to switch on (9pm vs wait for 10pm):** starting from your latest trigger (default 22:00) it considers switching on as much as an hour early, stepping back in 30-min slots. It keeps stepping earlier only while each slot is **not pricey** (under 30 p/kWh) **and not much dearer than the trigger price** (within a margin, default 8 p/kWh). The first slot that's pricey or a big jump stops it. So a cheap, flat evening → "Turn on 21:00"; prices tumbling into 10pm → "Wait until 22:00". The card lists the 21:00 / 21:30 / 22:00 prices so you can see why, and the recommended time is band-coloured.
 
 **Price curve** — a colour-coded chart (green = cheap → red = expensive, blue = negative) with your recommended windows highlighted and a "now" marker.
 
@@ -55,7 +55,7 @@ suggestions keep working regardless.
 - **Extra run must finish by** — latest-finish time for daytime extra loads (default 22:00).
 - **Extra-run active hours** — when an extra-run suggestion is shown (default 07:00–19:00).
 - **Start granularity** — on the hour (matches most appliance delay timers) or every 30 min.
-- **Aircon** — evening start + **latest time to trigger** (the run window; its end is the latest you'd switch on for the night), the **afternoon benchmark window** (the price you'd accept; default 14:00–16:00),
+- **Aircon** — evening start + **latest time to trigger** (the run window; its end is the latest you'd switch on for the night), **how many hours early** you'd consider switching on (default 1) and the **"wait if dearer than trigger by" margin** (default 8 p/kWh),
   the **"pricey" threshold** (p/kWh above which the run is tagged pricey; default 25),
   and the "expensive day" thresholds (peak ≥ ×median, or peak ≥ an absolute p/kWh).
 

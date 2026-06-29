@@ -192,10 +192,11 @@
       <label class="f">Latest time to trigger
         <input id="setAcTo" type="time">
       </label>
-      <label class="f full">Afternoon benchmark window (a price you'd accept)
-        <div class="row">
-          <input id="setBenchFrom" type="time"><span>–</span><input id="setBenchTo" type="time">
-        </div>
+      <label class="f">Switch on up to (h early)
+        <input id="setEarlyHoursBefore" type="number" step="0.5" min="0">
+      </label>
+      <label class="f">Wait if &gt; this dearer than trigger (p/kWh)
+        <input id="setEarlyMargin" type="number" step="1" min="0">
       </label>
       <label class="f">Expensive if peak ≥ ×median
         <input id="setExpMult" type="number" step="0.1" min="1">
@@ -224,7 +225,7 @@
 <script>
 "use strict";
 
-const APP_VERSION = "v1.2.0 · 2026-06-26";   // bump on each deploy so a refresh shows the new build
+const APP_VERSION = "v1.3.0 · 2026-06-26";   // bump on each deploy so a refresh shows the new build
 
 /* ---------- Settings ---------- */
 const DEFAULTS = {
@@ -232,7 +233,7 @@ const DEFAULTS = {
   washDur:2.5, dishDur:3.5, washKwh:"", dishKwh:"",
   weekdayBy:"07:00", weekendBy:"08:00", granularity:60,
   dayFrom:"07:00", dayTo:"19:00", extraBy:"22:00",
-  acFrom:"19:00", acTo:"22:00", benchFrom:"14:00", benchTo:"16:00",
+  acFrom:"19:00", acTo:"22:00", earlyHoursBefore:1, earlyMargin:8,
   expMult:1.8, expAbs:30, resumeCap:25
 };
 const REGIONS = {
@@ -391,37 +392,38 @@ function airconPlan(slots, now, s){
   const plan = { expensive, median:med, peak:{price:peak.price, time:peak.from},
                  comfortAvg, acFrom:s.acFrom, acTo:s.acTo, resumeCap:s.resumeCap };
 
-  // Price for the hour before the latest trigger (your usual "switch on 1h early" time).
-  const ehStart = new Date(+acToT - 60*60e3);
-  const ehSlots = slots.filter(r=> +r.from>=+ehStart && +r.from<+acToT);
-  plan.earlyHour = ehSlots.length
-    ? { at:ehStart, avg: ehSlots.reduce((a,r)=>a+r.price,0)/ehSlots.length } : null;
-
   if(!expensive){
     // Normal day: turn on at the evening start and leave it overnight.
     plan.highlight = { start:acFromT, end:acToT };
     return plan;
   }
 
-  // Expensive day: pre-cooling early doesn't hold (room heats straight back up), so instead bring the
-  // turn-on time forward from the latest trigger only while each 30-min slot beats an afternoon
-  // benchmark — a price you'd happily pay (default the 14:00–16:00 average).
-  const benchSlots = slots.filter(r=> +r.from>=+londonAt(now,s.benchFrom) && +r.from<+londonAt(now,s.benchTo));
-  const benchAvg = benchSlots.length ? benchSlots.reduce((a,r)=>a+r.price,0)/benchSlots.length : null;
-  plan.benchmark = benchAvg!=null ? { avg:benchAvg, from:s.benchFrom, to:s.benchTo } : null;
+  // Expensive day: decide when to switch on within the last `earlyHoursBefore` hours before the
+  // trigger (e.g. 9–10pm). Start as early as you would, but step later through any earlier half-hour
+  // that is either pricey (>= 30p) or much dearer than the trigger-time price (> earlyMargin).
+  const PRICEY = 30;                                          // "not pricey" = cheap/amber (< 30p)
+  const trigSlot = slots.find(r=> +r.from === +acToT);
+  const trigPrice = trigSlot ? trigSlot.price : null;
+  const earliest = new Date(+acToT - s.earlyHoursBefore*3600e3);
+  const cand = slots.filter(r=> +r.from>=+earliest && +r.from<+acToT);   // ascending, excludes the trigger slot
 
-  let onTime = acToT;
-  if(benchAvg!=null){
-    const evening = slots.filter(r=> +r.from>=+acFromT && +r.from<+acToT);  // ascending, contiguous half-hours
-    for(let i=evening.length-1; i>=0; i--){            // walk back from the latest trigger
-      if(evening[i].price < benchAvg) onTime = evening[i].from;
-      else break;                                      // first slot dearer than the benchmark stops it
-    }
+  let onTime = acToT, stopped = null;
+  for(let i=cand.length-1; i>=0; i--){                        // walk back from just before the trigger
+    const pr = cand[i].price;
+    const notPricey = pr < PRICEY;
+    const close = trigPrice==null || pr <= trigPrice + s.earlyMargin;
+    if(notPricey && close) onTime = cand[i].from;
+    else { stopped = {time:cand[i].from, price:pr, pricey:!notPricey, jump:!close}; break; }
   }
+
   plan.onTime = onTime;
   plan.broughtForward = +onTime < +acToT;
-  plan.onRun = triggerRun(slots, onTime, runLen, s.resumeCap);   // cost from the on-time over the run window
+  plan.stopped = stopped;
+  plan.trigPrice = trigPrice;
+  plan.onRun = triggerRun(slots, onTime, runLen, s.resumeCap);
   plan.highlight = { start:onTime, end: plan.onRun ? plan.onRun.end : acToT };
+  // the 9 / 9:30 / 10pm slot prices, for the at-a-glance comparison
+  plan.candidates = [...cand, ...(trigSlot?[trigSlot]:[])].map(c=>({at:c.from, price:c.price}));
   return plan;
 }
 
@@ -498,15 +500,6 @@ function airconCard(plan){
   card.appendChild(el("p","sub",
     `Evening peak ${p(plan.peak.price)} at ${fmtTime(plan.peak.time)} · today's median ${p(plan.median)}`));
 
-  // Your usual "switch on 1h early" price, with a band indicator.
-  if(plan.earlyHour){
-    const b=priceBand(plan.earlyHour.avg);
-    card.appendChild(el("div","rec",
-      `<div class="lbl">Switch on 1 h early (${fmtTime(plan.earlyHour.at)})</div>`+
-      `<div class="big"><b style="color:${b.color}">${p(plan.earlyHour.avg)}</b><span class="unit">/kWh</span> `+
-        `${bandPill(plan.earlyHour.avg)}</div>`));
-  }
-
   if(!plan.expensive){
     const r=el("div","rec");
     r.innerHTML=`<div class="lbl">Recommendation</div>`+
@@ -519,13 +512,18 @@ function airconCard(plan){
     const onStr = plan.onTime ? fmtTime(plan.onTime) : plan.acTo;
     const hrs = run ? Math.round((+run.end - +run.start)/3600e3) : null;
     const flag = run && priceBand(run.avg).max>30;   // amber-orange/red border
+    const tp = plan.trigPrice, st = plan.stopped;
+    const why = st
+      ? (st.pricey ? `${fmtTime(st.time)} is pricey (${p(st.price)})`
+                   : `${fmtTime(st.time)} is ${p(st.price)}, well above the ${tp!=null?p(tp):"–"} ${plan.acTo} price`)
+      : null;
     let meta;
-    if(plan.broughtForward && plan.benchmark){
-      meta = `Start early and leave it overnight — every 30 min back to ${onStr} is cheaper than the ${p(plan.benchmark.avg)} afternoon benchmark (${plan.benchmark.from}–${plan.benchmark.to}). Cooling earlier than that doesn't hold, so just get on as soon as it's cheap.`;
-    } else if(plan.benchmark){
-      meta = `The evening never drops below the ${p(plan.benchmark.avg)} afternoon benchmark (${plan.benchmark.from}–${plan.benchmark.to}) before ${plan.acTo}, so there's no point starting earlier — turn on at ${plan.acTo} and leave it overnight.`;
+    if(!plan.broughtForward){
+      meta = `Wait until ${plan.acTo} — ${why || "no cheaper slot beforehand"}, so there's no point switching on earlier.`;
+    } else if(!st){
+      meta = `Switch on at ${onStr} for the extra cool-down — ${onStr}–${plan.acTo} are close in price and not pricey, so getting on early is worth it.`;
     } else {
-      meta = `Turn on and leave it overnight (afternoon benchmark not available yet).`;
+      meta = `Switch on at ${onStr} — any earlier and ${why}, so don't go before then.`;
     }
     const r=el("div","rec"+(flag?" flag":""));
     r.innerHTML=`<div class="lbl">Recommendation</div>`+
@@ -533,6 +531,8 @@ function airconCard(plan){
         `${run?bandPill(run.avg):""}</div>`+
       `<div class="meta">${meta}</div>`;
     card.appendChild(r);
+    if(plan.candidates && plan.candidates.length) card.appendChild(el("div","alts",
+      "Options: "+plan.candidates.map(c=>`<span>${fmtTime(c.at)} <b style="color:${priceBand(c.price).color}">${p(c.price)}</b></span>`).join("")));
     card.appendChild(el("p","sub","Guidance only — cooling carry-over depends on your room; adjust to taste."));
   }
   return card;
@@ -548,14 +548,11 @@ function renderSummary(w, d, ac, s, deadline){
   let acWhen, acPr="—";
   if(!ac){ acWhen='<span style="color:var(--muted);font-weight:400">no data yet</span>'; }
   else {
-    const eh = ac.earlyHour;                                   // price 1h before the trigger (your usual on-time)
+    const a = ac.expensive ? (ac.onRun ? ac.onRun.avg : ac.trigPrice) : ac.comfortAvg;
     const onStr = ac.expensive ? (ac.onTime ? fmtTime(ac.onTime) : ac.acTo) : null;
     acWhen = (ac.expensive ? `Turn on ${onStr}` : `Run ${ac.acFrom}–${ac.acTo}`)
-      + (eh ? ` ${bandPill(eh.avg)}` : "");
-    if(eh) acPr = `<b style="color:${priceBand(eh.avg).color}">${p(eh.avg)}</b>`+
-      `<div style="font-size:10px;color:var(--muted);font-weight:400">@${fmtTime(eh.at)}</div>`;
-    else if(ac.onRun) acPr = `<b>${p(ac.onRun.avg)}</b>`;
-    else if(ac.comfortAvg!=null) acPr = `<b>${p(ac.comfortAvg)}</b>`;
+      + (a!=null ? ` ${bandPill(a)}` : "");
+    if(a!=null) acPr = `<b style="color:${priceBand(a).color}">${p(a)}</b>`;
   }
   $("summary").innerHTML =
     `<div class="card summary">`+
@@ -661,7 +658,7 @@ function fillForm(s){
   $("setGranularity").value=String(s.granularity);
   $("setExtraBy").value=s.extraBy; $("setDayFrom").value=s.dayFrom; $("setDayTo").value=s.dayTo;
   $("setAcFrom").value=s.acFrom; $("setAcTo").value=s.acTo;
-  $("setBenchFrom").value=s.benchFrom; $("setBenchTo").value=s.benchTo;
+  $("setEarlyHoursBefore").value=s.earlyHoursBefore; $("setEarlyMargin").value=s.earlyMargin;
   $("setExpMult").value=s.expMult; $("setExpAbs").value=s.expAbs; $("setResumeCap").value=s.resumeCap;
 }
 function readForm(){
@@ -674,7 +671,7 @@ function readForm(){
     granularity:parseInt($("setGranularity").value,10)||60,
     extraBy:$("setExtraBy").value||"22:00", dayFrom:$("setDayFrom").value||"07:00", dayTo:$("setDayTo").value||"19:00",
     acFrom:$("setAcFrom").value||"19:00", acTo:$("setAcTo").value||"22:00",
-    benchFrom:$("setBenchFrom").value||"14:00", benchTo:$("setBenchTo").value||"16:00",
+    earlyHoursBefore:num("setEarlyHoursBefore",1), earlyMargin:num("setEarlyMargin",8),
     expMult:num("setExpMult",1.8), expAbs:num("setExpAbs",30), resumeCap:num("setResumeCap",25)
   };
 }
