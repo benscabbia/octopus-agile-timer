@@ -198,6 +198,9 @@
       <label class="f">Wait if &gt; this dearer than trigger (p/kWh)
         <input id="setEarlyMargin" type="number" step="1" min="0">
       </label>
+      <label class="f">Switch on early only if ≤ (p/kWh)
+        <input id="setEarlyMaxP" type="number" step="1" min="0">
+      </label>
       <label class="f">Expensive if peak ≥ ×median
         <input id="setExpMult" type="number" step="0.1" min="1">
       </label>
@@ -225,7 +228,7 @@
 <script>
 "use strict";
 
-const APP_VERSION = "v1.3.2 · 2026-06-26";   // bump on each deploy so a refresh shows the new build
+const APP_VERSION = "v1.3.3 · 2026-06-26";   // bump on each deploy so a refresh shows the new build
 
 /* ---------- Settings ---------- */
 const DEFAULTS = {
@@ -233,7 +236,7 @@ const DEFAULTS = {
   washDur:2.5, dishDur:3.5, washKwh:"", dishKwh:"",
   weekdayBy:"07:00", weekendBy:"08:00", granularity:60,
   dayFrom:"07:00", dayTo:"19:00", extraBy:"22:00",
-  acFrom:"19:00", acTo:"22:00", earlyHoursBefore:1, earlyMargin:8,
+  acFrom:"19:00", acTo:"22:00", earlyHoursBefore:1, earlyMargin:8, earlyMaxP:32,
   expMult:1.8, expAbs:30, resumeCap:25
 };
 const REGIONS = {
@@ -401,9 +404,9 @@ function airconPlan(slots, now, s){
   // Expensive day: switch on early (up to `earlyHoursBefore`, e.g. 9pm) OR wait for the trigger (10pm).
   // Default to the EARLIEST early slot (most cool-down), but shift to a later early slot only if it's
   // "quite a bit" cheaper (>= earlyMargin) — so a trivial 30-min gap doesn't pull us off the hour.
-  // Then go early only if the resulting run is not pricey (< 30p) AND within earlyMargin of the
+  // Then go early only if the resulting run is not pricey (< earlyMaxP) AND within earlyMargin of the
   // trigger-time price; otherwise wait.
-  const PRICEY = 30;
+  const PRICEY = s.earlyMaxP;
   const trigSlot = slots.find(r=> +r.from === +acToT);
   const trigPrice = trigSlot ? trigSlot.price : null;
   const earlyStart = new Date(+acToT - s.earlyHoursBefore*3600e3);
@@ -669,7 +672,7 @@ function fillForm(s){
   $("setGranularity").value=String(s.granularity);
   $("setExtraBy").value=s.extraBy; $("setDayFrom").value=s.dayFrom; $("setDayTo").value=s.dayTo;
   $("setAcFrom").value=s.acFrom; $("setAcTo").value=s.acTo;
-  $("setEarlyHoursBefore").value=s.earlyHoursBefore; $("setEarlyMargin").value=s.earlyMargin;
+  $("setEarlyHoursBefore").value=s.earlyHoursBefore; $("setEarlyMargin").value=s.earlyMargin; $("setEarlyMaxP").value=s.earlyMaxP;
   $("setExpMult").value=s.expMult; $("setExpAbs").value=s.expAbs; $("setResumeCap").value=s.resumeCap;
 }
 function readForm(){
@@ -682,7 +685,7 @@ function readForm(){
     granularity:parseInt($("setGranularity").value,10)||60,
     extraBy:$("setExtraBy").value||"22:00", dayFrom:$("setDayFrom").value||"07:00", dayTo:$("setDayTo").value||"19:00",
     acFrom:$("setAcFrom").value||"19:00", acTo:$("setAcTo").value||"22:00",
-    earlyHoursBefore:num("setEarlyHoursBefore",1), earlyMargin:num("setEarlyMargin",8),
+    earlyHoursBefore:num("setEarlyHoursBefore",1), earlyMargin:num("setEarlyMargin",8), earlyMaxP:num("setEarlyMaxP",32),
     expMult:num("setExpMult",1.8), expAbs:num("setExpAbs",30), resumeCap:num("setResumeCap",25)
   };
 }
