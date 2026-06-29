@@ -28,6 +28,7 @@ appliance, so you can eyeball it in a second. Scroll down for the full detail.
 
 **Air conditioner** — auto-detects the kind of day:
 
+- **"Switch on 1 h early" price:** prominently shows the price for the hour before your latest trigger (e.g. 21:00) — the on-time that works well in practice — with a 💡 band: **cheap** (<20 p/kWh), **amber** (20–30), **bit pricey** (30–40), **expensive** (40+). This price and band also appear in the at-a-glance table.
 - **Normal day:** "Run 19:00–22:00" (your usual set-and-forget).
 - **Expensive day:** pre-cooling early doesn't help (the room heats straight back up), so it finds the **earliest worthwhile time to switch on before your latest trigger time** and leave it running overnight. Starting from the latest trigger (default 22:00) it walks back in 30-minute steps, keeping each slot that's **cheaper than an afternoon benchmark** (a price you'd happily pay, default the 14:00–16:00 average) and stopping at the first slot that isn't. If even the slot before the trigger is pricier than the benchmark, it just tells you to turn on at the trigger time. The recommended on-time is tagged **"pricey"** or **"ok"** vs your cap (default 25 p/kWh).
 

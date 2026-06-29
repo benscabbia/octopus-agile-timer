@@ -224,7 +224,7 @@
 <script>
 "use strict";
 
-const APP_VERSION = "v1.1.1 · 2026-06-24";   // bump on each deploy so a refresh shows the new build
+const APP_VERSION = "v1.2.0 · 2026-06-26";   // bump on each deploy so a refresh shows the new build
 
 /* ---------- Settings ---------- */
 const DEFAULTS = {
@@ -391,6 +391,12 @@ function airconPlan(slots, now, s){
   const plan = { expensive, median:med, peak:{price:peak.price, time:peak.from},
                  comfortAvg, acFrom:s.acFrom, acTo:s.acTo, resumeCap:s.resumeCap };
 
+  // Price for the hour before the latest trigger (your usual "switch on 1h early" time).
+  const ehStart = new Date(+acToT - 60*60e3);
+  const ehSlots = slots.filter(r=> +r.from>=+ehStart && +r.from<+acToT);
+  plan.earlyHour = ehSlots.length
+    ? { at:ehStart, avg: ehSlots.reduce((a,r)=>a+r.price,0)/ehSlots.length } : null;
+
   if(!expensive){
     // Normal day: turn on at the evening start and leave it overnight.
     plan.highlight = { start:acFromT, end:acToT };
@@ -424,6 +430,17 @@ const $ = id=>document.getElementById(id);
 function el(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; }
 function p(x){ return (x>=0? x.toFixed(1) : x.toFixed(1)) + "p"; }
 function poundEst(avg, kwh){ if(!kwh||kwh<=0) return ""; return ` · ~£${(avg*kwh/100).toFixed(2)}/run`; }
+
+// Price bands (p/kWh) for the aircon "how pricey" indicator
+const PRICE_BANDS = [
+  {max:20,       label:"cheap",      color:"#34d399"},
+  {max:30,       label:"amber",      color:"#f59e0b"},
+  {max:40,       label:"bit pricey", color:"#fb923c"},
+  {max:Infinity, label:"expensive",  color:"#ef4444"}
+];
+function priceBand(price){ return PRICE_BANDS.find(b=> price < b.max); }
+function bandPill(price){ const b=priceBand(price);
+  return `<span class="pill" style="background:${b.color}22;color:${b.color}">💡 ${b.label}</span>`; }
 
 function recBlock(label, win, kwh, opts){
   opts=opts||{};
@@ -481,19 +498,27 @@ function airconCard(plan){
   card.appendChild(el("p","sub",
     `Evening peak ${p(plan.peak.price)} at ${fmtTime(plan.peak.time)} · today's median ${p(plan.median)}`));
 
+  // Your usual "switch on 1h early" price, with a band indicator.
+  if(plan.earlyHour){
+    const b=priceBand(plan.earlyHour.avg);
+    card.appendChild(el("div","rec",
+      `<div class="lbl">Switch on 1 h early (${fmtTime(plan.earlyHour.at)})</div>`+
+      `<div class="big"><b style="color:${b.color}">${p(plan.earlyHour.avg)}</b><span class="unit">/kWh</span> `+
+        `${bandPill(plan.earlyHour.avg)}</div>`));
+  }
+
   if(!plan.expensive){
     const r=el("div","rec");
-    const pricey = plan.comfortAvg!=null && plan.comfortAvg>plan.resumeCap;
     r.innerHTML=`<div class="lbl">Recommendation</div>`+
       `<div class="big">Run ${plan.acFrom}–${plan.acTo} <span class="unit">avg ${plan.comfortAvg!=null?p(plan.comfortAvg):"–"}/kWh</span>`+
-        `<span class="pill ${pricey?"exp":"normal"}">${pricey?"pricey":"normal"}</span></div>`+
+        `${plan.comfortAvg!=null?bandPill(plan.comfortAvg):""}</div>`+
       `<div class="meta">Prices are normal — your usual set-and-forget evening run is fine.</div>`;
     card.appendChild(r);
   } else {
     const run = plan.onRun;
     const onStr = plan.onTime ? fmtTime(plan.onTime) : plan.acTo;
     const hrs = run ? Math.round((+run.end - +run.start)/3600e3) : null;
-    const pricey = run ? run.pricey : true;
+    const flag = run && priceBand(run.avg).max>30;   // amber-orange/red border
     let meta;
     if(plan.broughtForward && plan.benchmark){
       meta = `Start early and leave it overnight — every 30 min back to ${onStr} is cheaper than the ${p(plan.benchmark.avg)} afternoon benchmark (${plan.benchmark.from}–${plan.benchmark.to}). Cooling earlier than that doesn't hold, so just get on as soon as it's cheap.`;
@@ -502,10 +527,10 @@ function airconCard(plan){
     } else {
       meta = `Turn on and leave it overnight (afternoon benchmark not available yet).`;
     }
-    const r=el("div","rec"+(pricey?" flag":""));
+    const r=el("div","rec"+(flag?" flag":""));
     r.innerHTML=`<div class="lbl">Recommendation</div>`+
       `<div class="big">Turn on ${onStr}${run?` <span class="unit">avg ${p(run.avg)}/kWh, first ${hrs}h</span>`:""}`+
-        `<span class="pill ${pricey?"exp":"normal"}">${pricey?"pricey":"ok"}</span></div>`+
+        `${run?bandPill(run.avg):""}</div>`+
       `<div class="meta">${meta}</div>`;
     card.appendChild(r);
     card.appendChild(el("p","sub","Guidance only — cooling carry-over depends on your room; adjust to taste."));
@@ -522,20 +547,20 @@ function renderSummary(w, d, ac, s, deadline){
       `<td class="pr">—</td></tr>`;
   let acWhen, acPr="—";
   if(!ac){ acWhen='<span style="color:var(--muted);font-weight:400">no data yet</span>'; }
-  else if(!ac.expensive){
-    const pricey = ac.comfortAvg!=null && ac.comfortAvg>ac.resumeCap;
-    acWhen=`Run ${ac.acFrom}–${ac.acTo}<span class="pill ${pricey?"exp":"normal"}">${pricey?"pricey":"normal"}</span>`;
-    if(ac.comfortAvg!=null) acPr=`<b>${p(ac.comfortAvg)}</b>`;
-  } else {
-    const onStr = ac.onTime ? fmtTime(ac.onTime) : ac.acTo;
-    const pricey = ac.onRun ? ac.onRun.pricey : true;
-    acWhen=`Turn on ${onStr}<span class="pill ${pricey?"exp":"normal"}">${pricey?"pricey":"ok"}</span>`;
-    if(ac.onRun) acPr=`<b>${p(ac.onRun.avg)}</b>`;
+  else {
+    const eh = ac.earlyHour;                                   // price 1h before the trigger (your usual on-time)
+    const onStr = ac.expensive ? (ac.onTime ? fmtTime(ac.onTime) : ac.acTo) : null;
+    acWhen = (ac.expensive ? `Turn on ${onStr}` : `Run ${ac.acFrom}–${ac.acTo}`)
+      + (eh ? ` ${bandPill(eh.avg)}` : "");
+    if(eh) acPr = `<b style="color:${priceBand(eh.avg).color}">${p(eh.avg)}</b>`+
+      `<div style="font-size:10px;color:var(--muted);font-weight:400">@${fmtTime(eh.at)}</div>`;
+    else if(ac.onRun) acPr = `<b>${p(ac.onRun.avg)}</b>`;
+    else if(ac.comfortAvg!=null) acPr = `<b>${p(ac.comfortAvg)}</b>`;
   }
   $("summary").innerHTML =
     `<div class="card summary">`+
     `<h2>At a glance</h2>`+
-    `<p class="cap">Best single run · finish by ${deadline.by} (${deadline.weekend?"weekend":"weekday"}) · avg p/kWh</p>`+
+    `<p class="cap">Best single run · finish by ${deadline.by} (${deadline.weekend?"weekend":"weekday"}) · avg p/kWh · guidance only</p>`+
     `<table>`+
       row("🧺","Washing machine",w)+
       row("🍽️","Dishwasher",d)+
